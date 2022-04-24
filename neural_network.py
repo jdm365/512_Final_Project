@@ -1,4 +1,5 @@
 from tqdm import tqdm
+from nn_config import mlp_config, conv_config
 import sys
 import torch as T
 import torch.nn as nn
@@ -44,41 +45,48 @@ class InsuranceDataset(Dataset):
         
 
 class BinaryClassifier(nn.Module):
-    def __init__(self, input_dims, fc1_dims=1024, fc2_dims=1024, lr=1e-2, conv=False):
+    def __init__(self, input_dims, lr=1e-2, conv=False):
         super(BinaryClassifier, self).__init__()
         self.conv = conv
         self.mlp = nn.Sequential(
-            nn.Linear(input_dims, fc1_dims),
-            nn.BatchNorm1d(num_features=fc1_dims),
+            nn.Linear(input_dims, mlp_config['fc1_dims']),
+            nn.BatchNorm1d(num_features=mlp_config['fc1_dims']),
             nn.ReLU(),
-            nn.Linear(fc1_dims, fc2_dims),
-            nn.BatchNorm1d(num_features=fc2_dims),
+            nn.Linear(mlp_config['fc1_dims'], mlp_config['fc2_dims']),
+            nn.BatchNorm1d(num_features=mlp_config['fc2_dims']),
             nn.ReLU(),
-            nn.Linear(fc2_dims, fc2_dims),
-            nn.BatchNorm1d(num_features=fc2_dims),
+            nn.Linear(mlp_config['fc2_dims'], mlp_config['fc3_dims']),
+            nn.BatchNorm1d(num_features=mlp_config['fc3_dims']),
             nn.ReLU(),
-            nn.Linear(fc2_dims, 2),
-            nn.BatchNorm1d(num_features=2),
+            nn.Linear(mlp_config['fc3_dims'], mlp_config['output_dims']),
+            nn.BatchNorm1d(num_features=mlp_config['output_dims']),
             nn.Softmax(dim=-1)
         )
-
+        reduced_dims = input_dims - conv_config['kernel_size_1'] - conv_config['kernel_size_2'] - \
+                       conv_config['kernel_size_3'] + 3
         self.conv_net = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=128, kernel_size=4),
-            nn.BatchNorm1d(num_features=128),
+            nn.Conv1d(in_channels=conv_config['in_channels_1'], \
+                      out_channels=conv_config['out_channels_1'], \
+                      kernel_size=conv_config['kernel_size_1']),
+            nn.BatchNorm1d(num_features=conv_config['out_channels_1']),
             nn.ReLU(),
-            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=4),
-            nn.BatchNorm1d(num_features=128),
+            nn.Conv1d(in_channels=conv_config['in_channels_2'], \
+                      out_channels=conv_config['out_channels_2'], \
+                      kernel_size=conv_config['kernel_size_2']),
+            nn.BatchNorm1d(num_features=conv_config['out_channels_2']),
             nn.ReLU(),
-            nn.Dropout(p=.25),
-            nn.Conv1d(in_channels=128, out_channels=1, kernel_size=20),
-            nn.BatchNorm1d(num_features=1),
+            nn.Dropout(p=conv_config['dropout_probs']),
+            nn.Conv1d(in_channels=conv_config['in_channels_3'], \
+                      out_channels=conv_config['out_channels_3'], \
+                      kernel_size=conv_config['kernel_size_3']),
+            nn.BatchNorm1d(num_features=conv_config['out_channels_3']),
             nn.ReLU(),
-            nn.Linear(input_dims-3-3-19, 1024),
-            nn.BatchNorm1d(num_features=1),
+            nn.Linear(reduced_dims, conv_config['fc1_dims']),
+            nn.BatchNorm1d(num_features=conv_config['out_channels_3']),
             nn.ReLU(),
-            nn.Dropout(p=.25),
-            nn.Linear(1024, 2),
-            nn.BatchNorm1d(num_features=1),
+            nn.Dropout(p=conv_config['dropout_probs']),
+            nn.Linear(conv_config['fc1_dims'], conv_config['output_dims']),
+            nn.BatchNorm1d(num_features=conv_config['out_channels_3']),
             nn.Softmax(dim=-1)
         )
 
@@ -93,7 +101,7 @@ class BinaryClassifier(nn.Module):
         return self.mlp(input)
 
 
-def train(n_epochs=50, verbose=True):
+def train(n_epochs=50, verbose=True, save=True):
     train_data = InsuranceDataset()
     trainloader = DataLoader(train_data, batch_size=4096, shuffle=True)
     classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=3e-1, conv=True)
@@ -102,7 +110,8 @@ def train(n_epochs=50, verbose=True):
     print('...Training Neural Network...')
     for epoch in tqdm(range(n_epochs)):
         if epoch % 5 == 0 and epoch != 0:
-            T.save(classifier.state_dict(), 'Trained_Models/classifier')
+            if save:
+                T.save(classifier.state_dict(), 'Trained_Models/classifier')
             test()
         for _, batch in enumerate(trainloader):
             inputs, labels = batch
@@ -115,7 +124,8 @@ def train(n_epochs=50, verbose=True):
             average_loss = np.mean(losses[-2000:])
         if verbose:
             print(f'Loss after {epoch+1} epochs: {average_loss}')
-    T.save(classifier.state_dict(), 'Trained_Models/classifier')
+    if save:
+        T.save(classifier.state_dict(), 'Trained_Models/classifier')
     print('...Finished Training...')
 
 def test():
@@ -145,6 +155,6 @@ def test():
 
 
 if __name__ == '__main__':
-    train(25, verbose=False)
+    train(25, verbose=False, save=False)
     test()
 
