@@ -7,7 +7,7 @@ import sys
 if __name__ == '__main__':
     shutup.please()
     tree = TreeMethodClassifiers()
-    retrain = True
+    retrain = False
     if retrain:
         xgb_acc, ada_acc, bagg_acc, rf_acc = tree.train()
         nn_acc = test()
@@ -16,7 +16,7 @@ if __name__ == '__main__':
             'AdaBoost': [ada_acc],
             'Bagging': [bagg_acc],
             'Random Forest': [rf_acc],
-            'Convolutional Neural Network': [nn_acc]
+            'CNN': [nn_acc]
         }
         obj = json.dumps(accuracies)
         file = open('accuracies.json', 'w')

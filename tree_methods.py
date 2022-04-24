@@ -194,14 +194,16 @@ class TreeMethodClassifiers:
         plt.xticks(rotation='82.5')
         fig.tight_layout()
         fig.savefig('plots/feature_importances.png')
+        plt.close('all')
 
     def plot_relative_accuracies(self, accuracies:dict):
         plt.suptitle('Relative Model Accuracies')
         plot_df = pd.DataFrame.from_dict(accuracies)
         sns.barplot(data=plot_df)
-        plt.xticks(rotation='90')
+        plt.ylim(0.40, .80)
         plt.tight_layout()
         plt.savefig('plots/relative_accuracies.png')
+        plt.close('all')
 
     def plot_roc_curve(self, estimator, filename, title):
         ax = plt.gca()

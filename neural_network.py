@@ -63,20 +63,17 @@ class BinaryClassifier(nn.Module):
         )
 
         self.conv_net = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=512, kernel_size=4),
-            nn.BatchNorm1d(num_features=512),
+            nn.Conv1d(in_channels=1, out_channels=128, kernel_size=4),
+            nn.BatchNorm1d(num_features=128),
             nn.ReLU(),
-            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=4),
-            nn.BatchNorm1d(num_features=512),
-            nn.ReLU(),
-            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=4),
-            nn.BatchNorm1d(num_features=512),
+            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=4),
+            nn.BatchNorm1d(num_features=128),
             nn.ReLU(),
             nn.Dropout(p=.25),
-            nn.Conv1d(in_channels=512, out_channels=1, kernel_size=20),
+            nn.Conv1d(in_channels=128, out_channels=1, kernel_size=20),
             nn.BatchNorm1d(num_features=1),
             nn.ReLU(),
-            nn.Linear(input_dims-3-3-3-19, 1024),
+            nn.Linear(input_dims-3-3-19, 1024),
             nn.BatchNorm1d(num_features=1),
             nn.ReLU(),
             nn.Dropout(p=.25),
@@ -96,14 +93,17 @@ class BinaryClassifier(nn.Module):
         return self.mlp(input)
 
 
-def train(n_epochs=50):
+def train(n_epochs=50, verbose=True):
     train_data = InsuranceDataset()
     trainloader = DataLoader(train_data, batch_size=4096, shuffle=True)
-    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=1e-2, conv=True)
-    loss_fn = nn.CrossEntropyLoss(weight=T.tensor([0.13, 0.87]).cuda())
+    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=3e-1, conv=True)
+    loss_fn = nn.CrossEntropyLoss(weight=T.tensor([1.3, 8.7]).cuda())
     losses = []
     print('...Training Neural Network...')
     for epoch in tqdm(range(n_epochs)):
+        if epoch % 5 == 0 and epoch != 0:
+            T.save(classifier.state_dict(), 'Trained_Models/classifier')
+            test()
         for _, batch in enumerate(trainloader):
             inputs, labels = batch
             outputs = classifier.forward(inputs)
@@ -113,7 +113,8 @@ def train(n_epochs=50):
             classifier.optimizer.step()
             losses.append(loss.item())
             average_loss = np.mean(losses[-2000:])
-        print(f'Loss after {epoch+1} epochs: {average_loss}')
+        if verbose:
+            print(f'Loss after {epoch+1} epochs: {average_loss}')
     T.save(classifier.state_dict(), 'Trained_Models/classifier')
     print('...Finished Training...')
 
@@ -144,6 +145,6 @@ def test():
 
 
 if __name__ == '__main__':
-    train(100)
+    train(25, verbose=False)
     test()
 
