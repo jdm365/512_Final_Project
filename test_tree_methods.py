@@ -7,7 +7,7 @@ import sys
 if __name__ == '__main__':
     shutup.please()
     tree = TreeMethodClassifiers()
-    retrain = False
+    retrain = True
     if retrain:
         xgb_acc, ada_acc, bagg_acc, rf_acc = tree.train()
         nn_acc = test()

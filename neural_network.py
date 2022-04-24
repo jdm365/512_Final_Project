@@ -69,11 +69,14 @@ class BinaryClassifier(nn.Module):
             nn.Conv1d(in_channels=512, out_channels=512, kernel_size=4),
             nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
+            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=4),
+            nn.BatchNorm1d(num_features=512),
+            nn.ReLU(),
             nn.Dropout(p=.25),
             nn.Conv1d(in_channels=512, out_channels=1, kernel_size=20),
             nn.BatchNorm1d(num_features=1),
             nn.ReLU(),
-            nn.Linear(input_dims-3-3-19, 1024),
+            nn.Linear(input_dims-3-3-3-19, 1024),
             nn.BatchNorm1d(num_features=1),
             nn.ReLU(),
             nn.Dropout(p=.25),
@@ -96,8 +99,8 @@ class BinaryClassifier(nn.Module):
 def train(n_epochs=50):
     train_data = InsuranceDataset()
     trainloader = DataLoader(train_data, batch_size=4096, shuffle=True)
-    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=1e-2, conv=False)
-    loss_fn = nn.CrossEntropyLoss(weight=T.tensor([1.0, 5.0]).cuda())
+    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=1e-2, conv=True)
+    loss_fn = nn.CrossEntropyLoss(weight=T.tensor([0.13, 0.87]).cuda())
     losses = []
     print('...Training Neural Network...')
     for epoch in tqdm(range(n_epochs)):
@@ -117,14 +120,14 @@ def train(n_epochs=50):
 def test():
     test_data = InsuranceDataset(filename='normalized_data/test.csv')
     testloader = DataLoader(test_data, batch_size=4096, shuffle=True)
-    classifier = BinaryClassifier(input_dims=test_data.input_dims, lr=1e-2, conv=False)
+    classifier = BinaryClassifier(input_dims=test_data.input_dims, lr=1e-2, conv=True)
     classifier.load_state_dict(T.load('Trained_Models/classifier'))
     classifier.eval()
     correct = 0
     total = 0
     tot_pred = 0
     with T.no_grad():
-        print('...Testing...')
+        print('...Testing Neural Network...')
         for data in testloader:
             inputs, labels = data
             predicted = T.argmax(classifier(inputs), dim=-1)
@@ -136,11 +139,11 @@ def test():
         tot_pred /= total
 
     print(f'Test Accuracy: {100 * correct // total}%')
-    print(f'Percentage of Ones Predicted: {100 * tot_pred}%')
+    print(f'Percentage Ones Predicted: {100 * tot_pred}%')
     return correct / total
 
 
 if __name__ == '__main__':
-    train()
+    train(100)
     test()
 

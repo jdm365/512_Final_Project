@@ -1,4 +1,5 @@
 import sys
+from isort import file
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -12,8 +13,7 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from hyperopt import Trials, fmin, hp, tpe
 from sklearn.metrics import f1_score, roc_auc_score, accuracy_score, confusion_matrix, \
-                            precision_recall_curve, auc, roc_curve, recall_score, \
-                            classification_report \
+                            RocCurveDisplay, ConfusionMatrixDisplay
 
 class TreeMethodClassifiers:
     def __init__(self, training_filename='official_data/train.csv', 
@@ -94,7 +94,7 @@ class TreeMethodClassifiers:
         x_test = x_test[order]
         return (x_train, y_train), (x_test, y_test)
 
-    def xgboost(self, config):
+    def xgboost(self, config, plot=False):
         clf = xgb.XGBClassifier(n_estimators=25,
                                 max_depth=int(config['max_depth']),
                                 gamma=int(config['gamma']),
@@ -108,6 +108,11 @@ class TreeMethodClassifiers:
         self.xgb_accuracy = accuracy_score(self.y_test, preds > 0.5)
         Roc_Auc_Score = roc_auc_score(self.y_test, y_score)
         loss = -Roc_Auc_Score
+        if plot:
+            self.plot_roc_curve(clf, filename='plots/XGBoost_ROC.png', 
+                                title='XGBoost ROC Curve')
+            self.plot_confusion_matrix(preds, filename='plots/XGBoost_confusion_mat.png', 
+                                       title='XGBoost Confusion Matrix')
         #print ("ROC-AUC Score:", Roc_Auc_Score)
         #print ("Accuracy:", accuracy)
         return loss
@@ -120,7 +125,7 @@ class TreeMethodClassifiers:
                         max_evals = 100,
                         trials = trials)
         self.xgb_config = optimal_hyperparameters
-        return self.xgboost(self.xgb_config)
+        return self.xgboost(self.xgb_config, plot=True)
 
     def adaboost(self):
         print('...Training adaboost...')
@@ -132,6 +137,10 @@ class TreeMethodClassifiers:
             preds = clf.predict(self.x_test)
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
+            self.plot_roc_curve(clf, filename='plots/AdaBoost_ROC.png', 
+                                title='AdaBoost ROC Curve')
+            self.plot_confusion_matrix(preds, filename='plots/AdaBoost_confusion_mat.png', 
+                                       title='AdaBoost Confusion Matrix')
             print (f'Accuracy {N} trees:', accuracy)
         return max(accuracy_n_est)
 
@@ -141,12 +150,18 @@ class TreeMethodClassifiers:
         accuracy_n_est = []
         for N in n_estimators:
             start = time.time()
-            clf = BaggingClassifier(base_estimator=SVC(), n_estimators=N, max_samples=0.01)
+            clf = BaggingClassifier(base_estimator=SVC(), n_estimators=N, 
+                                    max_samples=0.01)
             clf.fit(self.x_train, self.y_train)
             preds = clf.predict(self.x_test)
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
-            print (f'Accuracy {N} trees:', accuracy, f'Time taken {int(time.time() - start)} seconds')
+            self.plot_roc_curve(clf, filename='plots/Bagging_ROC.png', 
+                                title='Bagging ROC Curve')
+            self.plot_confusion_matrix(preds, filename='plots/Bagging_confusion_mat.png', 
+                                       title='Bagging Confusion Matrix')
+            print (f'Accuracy {N} trees:', accuracy, 
+                   f'Time taken {int(time.time() - start)} seconds')
         return max(accuracy_n_est)
 
     def randomForest(self):
@@ -159,13 +174,18 @@ class TreeMethodClassifiers:
             preds = clf.predict(self.x_test)
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
+            self.plot_roc_curve(clf, filename='plots/Random_Forest_ROC.png', 
+                                title='Random Forest ROC Curve')
+            self.plot_confusion_matrix(preds, filename='plots/Random_Forest_confusion_mat.png', 
+                                       title='Random Forest Confusion Matrix')
             print (f'Accuracy depth {depth}:', accuracy)
         return max(accuracy_n_est), clf
 
     def generate_feature_imp_plot(self, model):
         feature_names = [name for name in self.x_train.columns]
         importances = model.feature_importances_
-        plot_df = pd.DataFrame(zip(feature_names, importances), columns=['feature_names', 'importances'])
+        plot_df = pd.DataFrame(zip(feature_names, importances), 
+                                   columns=['feature_names', 'importances'])
         plot_df.sort_values(by=['importances'], ascending=False, inplace=True)
         fig, ax = plt.subplots()
         sns.barplot('feature_names', 'importances', data=plot_df)
@@ -182,6 +202,25 @@ class TreeMethodClassifiers:
         plt.xticks(rotation='90')
         plt.tight_layout()
         plt.savefig('plots/relative_accuracies.png')
+
+    def plot_roc_curve(self, estimator, filename, title):
+        ax = plt.gca()
+        fig = RocCurveDisplay.from_estimator(estimator, self.x_test, 
+                                             self.y_test, ax=ax, alpha=0.8)
+        fig.plot(ax=ax, alpha=0.8)
+        plt.suptitle(title)
+        plt.savefig(filename)
+        plt.close('all')
+
+    def plot_confusion_matrix(self, y_pred, filename, title):
+        cmat = np.round(confusion_matrix(self.y_test, y_pred, \
+                        labels=[0, 1]) / len(self.y_test), 2)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cmat,
+                                      display_labels=['False', 'True'])
+        disp.plot()
+        plt.suptitle(title)
+        plt.savefig(filename)
+        plt.close('all')
 
     def train(self, method='xgboost'):
         print('...Training xgboost...')
