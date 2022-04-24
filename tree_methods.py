@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.utils import resample
 import time
@@ -37,6 +38,7 @@ class TreeMethodClassifiers:
         self.methods = {
             'xgboost': self.xgboost
         }
+        self.xgb_accuracy = 0
 
     def upsample(self, df):
         df_minority = df[df['Response'] == 1]
@@ -93,7 +95,7 @@ class TreeMethodClassifiers:
         return (x_train, y_train), (x_test, y_test)
 
     def xgboost(self, config):
-        clf = xgb.XGBClassifier(n_estimators=10,
+        clf = xgb.XGBClassifier(n_estimators=25,
                                 max_depth=int(config['max_depth']),
                                 gamma=int(config['gamma']),
                                 min_child_weight=int(config['min_child_weight']),
@@ -103,15 +105,25 @@ class TreeMethodClassifiers:
                 verbose=False)
         preds = clf.predict(self.x_test)
         y_score = clf.predict_proba(self.x_test)[:, 1]
-        accuracy = accuracy_score(self.y_test, preds > 0.5)
+        self.xgb_accuracy = accuracy_score(self.y_test, preds > 0.5)
         Roc_Auc_Score = roc_auc_score(self.y_test, y_score)
         loss = -Roc_Auc_Score
         #print ("ROC-AUC Score:", Roc_Auc_Score)
         #print ("Accuracy:", accuracy)
         return loss
 
+    def tune_hyperparameters(self, method='xgboost'):
+        trials = Trials()
+        optimal_hyperparameters = fmin(fn = self.methods[method],
+                        space = self.xgb_config,
+                        algo = tpe.suggest,
+                        max_evals = 100,
+                        trials = trials)
+        self.xgb_config = optimal_hyperparameters
+        return self.xgboost(self.xgb_config)
+
     def adaboost(self):
-        print('..Training adaboost...')
+        print('...Training adaboost...')
         n_estimators = [10, 50, 100, 500, 1000]
         accuracy_n_est = []
         for N in n_estimators:
@@ -121,10 +133,10 @@ class TreeMethodClassifiers:
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
             print (f'Accuracy {N} trees:', accuracy)
-        return dict(zip(n_estimators, accuracy_n_est))
+        return max(accuracy_n_est)
 
     def bagging(self):
-        print('..Training bagging...')
+        print('...Training bagging...')
         n_estimators = [25]
         accuracy_n_est = []
         for N in n_estimators:
@@ -134,8 +146,8 @@ class TreeMethodClassifiers:
             preds = clf.predict(self.x_test)
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
-            print (f'Accuracy {N} trees:', accuracy, f'Time taken {int(time.time()-start)} seconds')
-        return dict(zip(n_estimators, accuracy_n_est))
+            print (f'Accuracy {N} trees:', accuracy, f'Time taken {int(time.time() - start)} seconds')
+        return max(accuracy_n_est)
 
     def randomForest(self):
         print('..Training Random Forest...')
@@ -148,47 +160,39 @@ class TreeMethodClassifiers:
             accuracy = accuracy_score(self.y_test, preds > 0.5)
             accuracy_n_est.append(accuracy)
             print (f'Accuracy depth {depth}:', accuracy)
-        return dict(zip(max_depths, accuracy_n_est)), clf
-
-    def tune_hyperparameters(self, method='xgboost'):
-        trials = Trials()
-        optimal_hyperparameters = fmin(fn = self.methods[method],
-                        space = self.xgb_config,
-                        algo = tpe.suggest,
-                        max_evals = 100,
-                        trials = trials)
-        self.xgb_config = optimal_hyperparameters
-        return self.xgboost(self.xgb_config)
+        return max(accuracy_n_est), clf
 
     def generate_feature_imp_plot(self, model):
-        feature_names = [f'feature {i}' for i in range(self.x_train.shape[1])]
+        feature_names = [name for name in self.x_train.columns]
         importances = model.feature_importances_
-        std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
-        forest_importances = pd.Series(importances, index=feature_names)
-
+        plot_df = pd.DataFrame(zip(feature_names, importances), columns=['feature_names', 'importances'])
+        plot_df.sort_values(by=['importances'], ascending=False, inplace=True)
         fig, ax = plt.subplots()
-        forest_importances.plot.bar(yerr=std, ax=ax)
+        sns.barplot('feature_names', 'importances', data=plot_df)
         ax.set_title("Feature importances using MDI")
         ax.set_ylabel("Mean decrease in impurity")
+        plt.xticks(rotation='82.5')
         fig.tight_layout()
         fig.savefig('plots/feature_importances.png')
 
     def plot_relative_accuracies(self, accuracies:dict):
-        fig = plt.bar(*zip(*accuracies.items()))
-        fig.savefig('plots/relative_accuracies.png')
-
+        plt.suptitle('Relative Model Accuracies')
+        plot_df = pd.DataFrame.from_dict(accuracies)
+        sns.barplot(data=plot_df)
+        plt.xticks(rotation='90')
+        plt.tight_layout()
+        plt.savefig('plots/relative_accuracies.png')
 
     def train(self, method='xgboost'):
-        print('..Training xgboost...')
-        xgb_best_accuracy = self.tune_hyperparameters(method)
-        adaboost_accuracies = self.adaboost()
-        bagging_accuracies = self.bagging()
-        randomForest_accuracies, rf_model = self.randomForest()
+        print('...Training xgboost...')
+        self.tune_hyperparameters(method)
+        xgb_best_accuracy = self.xgb_accuracy
+        adaboost_best_accuracy = self.adaboost()
+        bagging_best_accuracy = self.bagging()
+        randomForest_best_accuracy, rf_model = self.randomForest()
 
         self.generate_feature_imp_plot(rf_model)
         return xgb_best_accuracy, \
-                max(adaboost_accuracies, key=adaboost_accuracies.get), \
-                max(bagging_accuracies, key=bagging_accuracies.get), \
-                max(randomForest_accuracies, key=randomForest_accuracies.get)
-
-
+                adaboost_best_accuracy, \
+                bagging_best_accuracy, \
+                randomForest_best_accuracy

@@ -63,14 +63,14 @@ class BinaryClassifier(nn.Module):
         )
 
         self.conv_net = nn.Sequential(
-            nn.Conv1d(in_channels=1, out_channels=128, kernel_size=4),
-            nn.BatchNorm1d(num_features=128),
+            nn.Conv1d(in_channels=1, out_channels=512, kernel_size=4),
+            nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
-            nn.Conv1d(in_channels=128, out_channels=128, kernel_size=4),
-            nn.BatchNorm1d(num_features=128),
+            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=4),
+            nn.BatchNorm1d(num_features=512),
             nn.ReLU(),
             nn.Dropout(p=.25),
-            nn.Conv1d(in_channels=128, out_channels=1, kernel_size=20),
+            nn.Conv1d(in_channels=512, out_channels=1, kernel_size=20),
             nn.BatchNorm1d(num_features=1),
             nn.ReLU(),
             nn.Linear(input_dims-3-3-19, 1024),
@@ -96,10 +96,10 @@ class BinaryClassifier(nn.Module):
 def train(n_epochs=50):
     train_data = InsuranceDataset()
     trainloader = DataLoader(train_data, batch_size=4096, shuffle=True)
-    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=1e-2, conv=True)
+    classifier = BinaryClassifier(input_dims=train_data.input_dims, lr=1e-2, conv=False)
     loss_fn = nn.CrossEntropyLoss(weight=T.tensor([1.0, 5.0]).cuda())
     losses = []
-    print('...Training...')
+    print('...Training Neural Network...')
     for epoch in tqdm(range(n_epochs)):
         for _, batch in enumerate(trainloader):
             inputs, labels = batch
@@ -117,7 +117,7 @@ def train(n_epochs=50):
 def test():
     test_data = InsuranceDataset(filename='normalized_data/test.csv')
     testloader = DataLoader(test_data, batch_size=4096, shuffle=True)
-    classifier = BinaryClassifier(input_dims=test_data.input_dims, lr=1e-2, conv=True)
+    classifier = BinaryClassifier(input_dims=test_data.input_dims, lr=1e-2, conv=False)
     classifier.load_state_dict(T.load('Trained_Models/classifier'))
     classifier.eval()
     correct = 0
@@ -137,7 +137,7 @@ def test():
 
     print(f'Test Accuracy: {100 * correct // total}%')
     print(f'Percentage of Ones Predicted: {100 * tot_pred}%')
-    return correct // total
+    return correct / total
 
 
 if __name__ == '__main__':
