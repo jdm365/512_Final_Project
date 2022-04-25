@@ -48,7 +48,9 @@ class TreeMethodClassifiers:
             replace=True,
             n_samples=len(df_majority)
         )
-        return pd.concat([df_majority, df_upsampled])
+        resampled = pd.concat([df_majority, df_upsampled])
+        self.generate_class_balancing_plot(df, resampled)
+        return resampled
 
 
     def transform(self, df):
@@ -223,6 +225,16 @@ class TreeMethodClassifiers:
         plt.suptitle(title)
         plt.savefig(filename)
         plt.close('all')
+
+    def generate_class_balancing_plot(self, original_data, resampled_data):
+        fig, ax = plt.subplots(1,2)
+        plt.suptitle('Classes Before and After Resampling')
+        sns.countplot(x='Response', data=original_data, ax=ax[0])
+        sns.countplot(x='Response', data=resampled_data, ax=ax[1])
+        plt.tight_layout()
+        plt.savefig('plots/class_imbalances.png')
+        plt.close('all')
+
 
     def train(self, method='xgboost'):
         print('...Training xgboost...')
